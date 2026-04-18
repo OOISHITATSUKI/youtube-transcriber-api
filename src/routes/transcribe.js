@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
-import { downloadAudio, cleanupAudio } from '../services/youtube.js';
+import { fetchTranscript, cleanupAudio } from '../services/youtube.js';
 import { transcribeAudio } from '../services/whisper.js';
 
 export const transcribeRouter = Router();
@@ -17,10 +17,9 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 25 * 1024 * 1024 }, // 25MB (Whisper API limit)
+  limits: { fileSize: 25 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowed = ['audio/mpeg', 'audio/mp3', 'audio/mp4', 'audio/wav', 'audio/webm', 'audio/ogg', 'audio/x-m4a', 'audio/m4a', 'video/mp4', 'video/webm', 'video/quicktime'];
-    if (allowed.includes(file.mimetype) || file.originalname.match(/\.(mp3|mp4|m4a|wav|webm|ogg|mov)$/i)) {
+    if (file.originalname.match(/\.(mp3|mp4|m4a|wav|webm|ogg|mov|flac)$/i)) {
       cb(null, true);
     } else {
       cb(new Error('Unsupported file format'));
@@ -28,7 +27,7 @@ const upload = multer({
   },
 });
 
-// POST /api/transcribe — YouTube URL
+// POST /api/transcribe — YouTube URL → fetch subtitles via innertube API
 transcribeRouter.post('/', async (req, res) => {
   const { url } = req.body;
 
@@ -41,43 +40,38 @@ transcribeRouter.post('/', async (req, res) => {
     return res.status(400).json({ error: 'Please enter a valid YouTube URL' });
   }
 
-  let audioPath = null;
-
   try {
-    const maxSeconds = 180;
-    const { audioPath: dlPath, title, duration } = await downloadAudio(url, maxSeconds);
-    audioPath = dlPath;
+    const { transcript, title, duration } = await fetchTranscript(url);
 
-    const transcript = await transcribeAudio(audioPath);
-
-    res.json({
-      transcript,
-      title,
-      duration,
-      isTruncated: duration > maxSeconds,
-      processedDuration: Math.min(duration, maxSeconds),
-    });
-
-  } catch (error) {
-    console.error('Transcription error:', error);
-
-    // If yt-dlp fails, tell frontend to use file upload
-    if (error.message.includes('download failed') || error.message.includes('bot')) {
-      return res.status(422).json({
-        error: 'YouTube download blocked. Please upload the audio/video file directly.',
-        code: 'UPLOAD_REQUIRED',
+    if (transcript) {
+      return res.json({
+        transcript,
+        title,
+        duration,
+        isTruncated: false,
+        processedDuration: duration,
+        source: 'subtitles',
       });
     }
 
-    res.status(500).json({
-      error: error.message || 'Transcription failed',
+    // No subtitles available
+    return res.status(422).json({
+      error: 'No subtitles available for this video. Please upload the audio/video file for AI transcription.',
+      code: 'UPLOAD_REQUIRED',
+      title,
+      duration,
     });
-  } finally {
-    if (audioPath) await cleanupAudio(audioPath);
+
+  } catch (error) {
+    console.error('Transcript fetch error:', error);
+    return res.status(422).json({
+      error: 'Could not fetch subtitles. Please upload the audio/video file directly.',
+      code: 'UPLOAD_REQUIRED',
+    });
   }
 });
 
-// POST /api/transcribe/upload — Direct file upload
+// POST /api/transcribe/upload — File upload → Whisper API
 transcribeRouter.post('/upload', upload.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
@@ -91,9 +85,10 @@ transcribeRouter.post('/upload', upload.single('file'), async (req, res) => {
     res.json({
       transcript,
       title: req.file.originalname.replace(/\.[^.]+$/, ''),
-      duration: 0, // Unknown from file upload
+      duration: 0,
       isTruncated: false,
       processedDuration: 0,
+      source: 'whisper',
     });
 
   } catch (error) {

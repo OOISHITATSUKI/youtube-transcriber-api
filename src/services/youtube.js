@@ -1,175 +1,109 @@
-import { execFile } from 'child_process';
-import { promisify } from 'util';
-import path from 'path';
-import fs from 'fs/promises';
-import { v4 as uuidv4 } from 'uuid';
-import https from 'https';
-import http from 'http';
-
-const execFileAsync = promisify(execFile);
-
 /**
- * Download a file from URL to local path
+ * YouTube transcript fetcher — scrapes video page for caption data.
+ * No audio download, no yt-dlp needed.
  */
-function downloadFile(url, destPath) {
-  return new Promise((resolve, reject) => {
-    const proto = url.startsWith('https') ? https : http;
-    const file = require('fs').createWriteStream(destPath);
-    proto.get(url, (res) => {
-      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        file.close();
-        downloadFile(res.headers.location, destPath).then(resolve).catch(reject);
-        return;
-      }
-      if (res.statusCode !== 200) {
-        file.close();
-        reject(new Error(`Download failed with status ${res.statusCode}`));
-        return;
-      }
-      res.pipe(file);
-      file.on('finish', () => { file.close(); resolve(); });
-      file.on('error', reject);
-    }).on('error', (err) => { file.close(); reject(err); });
-  });
-}
 
-/**
- * Extract video ID from YouTube URL
- */
+const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+
 function extractVideoId(url) {
-  const patterns = [
-    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/,
-  ];
-  for (const p of patterns) {
-    const m = url.match(p);
-    if (m) return m[1];
-  }
-  return null;
+  const m = url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/);
+  return m ? m[1] : null;
 }
 
-/**
- * Get video info using yt-dlp (metadata only, no download)
- * Falls back to basic info if bot-detected
- */
-async function getVideoInfo(url) {
-  try {
-    const { stdout } = await execFileAsync('yt-dlp', [
-      '--dump-json',
-      '--no-download',
-      '--no-check-certificates',
-      '--extractor-args', 'youtube:player_client=ios',
-      url,
-    ], { timeout: 30000 });
-    const info = JSON.parse(stdout);
-    return { title: info.title || 'Unknown', duration: Math.ceil(info.duration || 0) };
-  } catch {
-    // Fallback: return minimal info
-    return { title: 'YouTube Video', duration: 0 };
+export async function fetchTranscript(url) {
+  const videoId = extractVideoId(url);
+  if (!videoId) throw new Error('Invalid YouTube URL');
+
+  // Step 1: Fetch video page HTML
+  const pageRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+    headers: {
+      'User-Agent': USER_AGENT,
+      'Accept-Language': 'en-US,en;q=0.9',
+    },
+  });
+  const html = await pageRes.text();
+
+  // Step 2: Extract ytInitialPlayerResponse
+  const match = html.match(/ytInitialPlayerResponse\s*=\s*(\{.+?\});\s*(?:var|<\/script)/s);
+  if (!match) {
+    throw new Error('Could not parse video page');
   }
+
+  const data = JSON.parse(match[1]);
+  const title = data.videoDetails?.title || 'YouTube Video';
+  const duration = parseInt(data.videoDetails?.lengthSeconds || '0');
+
+  // Step 3: Find caption tracks
+  const tracks = data.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+  if (!tracks || tracks.length === 0) {
+    return { transcript: null, title, duration };
+  }
+
+  // Prefer: English > auto-generated > first available
+  const preferred =
+    tracks.find(t => t.languageCode === 'en' && t.kind !== 'asr') ||
+    tracks.find(t => t.languageCode === 'en') ||
+    tracks.find(t => t.kind === 'asr') ||
+    tracks[0];
+
+  if (!preferred?.baseUrl) {
+    return { transcript: null, title, duration };
+  }
+
+  // Step 4: Fetch caption XML
+  const capRes = await fetch(preferred.baseUrl, {
+    headers: { 'User-Agent': USER_AGENT },
+  });
+  const xml = await capRes.text();
+
+  // Step 5: Parse
+  const transcript = parseCaptionXml(xml);
+  return { transcript, title, duration };
 }
 
-/**
- * Download audio using yt-dlp with multiple client fallbacks
- */
-async function downloadWithYtdlp(url, outputPath) {
-  const clients = ['ios', 'android', 'web_embedded', 'tv'];
+function parseCaptionXml(xml) {
+  const regex = /<text start="([^"]*)" dur="([^"]*)"[^>]*>([^<]*)<\/text>/g;
+  const entries = [];
+  let match;
 
-  for (const client of clients) {
-    try {
-      await execFileAsync('yt-dlp', [
-        '--no-check-certificates',
-        '--no-cache-dir',
-        '--extractor-args', `youtube:player_client=${client}`,
-        '-x',
-        '--audio-format', 'mp3',
-        '--audio-quality', '4',
-        '-o', outputPath,
-        '--no-playlist',
-        '--max-filesize', '50m',
-        url,
-      ], { timeout: 180000 });
-      return true;
-    } catch (err) {
-      console.log(`yt-dlp client ${client} failed, trying next...`);
-      continue;
+  while ((match = regex.exec(xml)) !== null) {
+    const startSec = parseFloat(match[1]);
+    const text = decodeHtmlEntities(match[3]).trim();
+    if (!text) continue;
+
+    const min = Math.floor(startSec / 60);
+    const sec = Math.floor(startSec % 60);
+    const timestamp = `[${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}]`;
+    entries.push({ timestamp, text });
+  }
+
+  if (entries.length === 0) return null;
+
+  // Deduplicate
+  const deduped = [entries[0]];
+  for (let i = 1; i < entries.length; i++) {
+    if (entries[i].text !== entries[i - 1].text) {
+      deduped.push(entries[i]);
     }
   }
-  return false;
+
+  return deduped.map(e => `${e.timestamp} ${e.text}`).join('\n');
 }
 
-export async function downloadAudio(url, maxSeconds = null) {
-  const jobId = uuidv4();
-  const outputDir = '/tmp/audio';
-  const outputPath = path.join(outputDir, `${jobId}.%(ext)s`);
-  const mp3Path = path.join(outputDir, `${jobId}.mp3`);
-
-  try {
-    // Get video info
-    const { title, duration } = await getVideoInfo(url);
-
-    // Try yt-dlp with multiple clients
-    let success = await downloadWithYtdlp(url, outputPath);
-
-    // If all yt-dlp clients fail, try direct audio extraction via yt-dlp with different approach
-    if (!success) {
-      try {
-        await execFileAsync('yt-dlp', [
-          '--no-check-certificates',
-          '-f', 'bestaudio[ext=m4a]/bestaudio',
-          '-o', mp3Path,
-          '--no-playlist',
-          url,
-        ], { timeout: 180000 });
-        success = true;
-      } catch {
-        throw new Error('All download methods failed. YouTube may be blocking this server.');
-      }
-    }
-
-    // Find the output file
-    const files = await fs.readdir(outputDir);
-    const audioFile = files.find(f => f.startsWith(jobId));
-
-    if (!audioFile) {
-      throw new Error('Failed to generate audio file');
-    }
-
-    const audioPath = path.join(outputDir, audioFile);
-
-    // If we need to truncate and have ffmpeg
-    if (maxSeconds && duration > maxSeconds) {
-      const truncatedPath = path.join(outputDir, `${jobId}_cut.mp3`);
-      try {
-        await execFileAsync('ffmpeg', [
-          '-i', audioPath,
-          '-t', String(maxSeconds),
-          '-c', 'copy',
-          truncatedPath,
-        ], { timeout: 30000 });
-        await fs.unlink(audioPath);
-        return { audioPath: truncatedPath, title, duration, jobId };
-      } catch {
-        // If ffmpeg truncation fails, return full file
-      }
-    }
-
-    return { audioPath, title, duration, jobId };
-
-  } catch (error) {
-    try {
-      const files = await fs.readdir(outputDir);
-      for (const f of files) {
-        if (f.startsWith(jobId)) {
-          await fs.unlink(path.join(outputDir, f));
-        }
-      }
-    } catch {}
-    throw new Error(`Audio download failed: ${error.message}`);
-  }
+function decodeHtmlEntities(text) {
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/\n/g, ' ');
 }
 
 export async function cleanupAudio(audioPath) {
   try {
-    await fs.unlink(audioPath);
+    const { unlink } = await import('fs/promises');
+    await unlink(audioPath);
   } catch {}
 }
