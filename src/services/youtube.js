@@ -14,11 +14,12 @@ export async function fetchTranscript(url) {
   const videoId = extractVideoId(url);
   if (!videoId) throw new Error('Invalid YouTube URL');
 
-  // Step 1: Fetch video page HTML
+  // Step 1: Fetch video page HTML (with consent cookie to bypass EU consent screen)
   const pageRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
     headers: {
       'User-Agent': USER_AGENT,
       'Accept-Language': 'en-US,en;q=0.9',
+      'Cookie': 'CONSENT=YES+cb.20210328-17-p0.en+FX+634; SOCS=CAISEwgDEgk2ODA0MTMyNTQaAmVuIAEaBgiA_YGYOA',
     },
   });
   const html = await pageRes.text();
