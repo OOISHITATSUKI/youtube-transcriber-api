@@ -1,8 +1,10 @@
 import { Supadata } from '@supadata/js';
 
-const supadata = new Supadata({
-  apiKey: process.env.SUPADATA_API_KEY,
-});
+let supadata;
+function getClient() {
+  if (!supadata) supadata = new Supadata({ apiKey: process.env.SUPADATA_API_KEY });
+  return supadata;
+}
 
 function extractVideoId(url) {
   const patterns = [
@@ -22,19 +24,27 @@ export async function transcribeVideo(url, maxSeconds = null) {
     throw new Error('Invalid YouTube URL');
   }
 
-  // Get transcript via Supadata API
-  const transcriptResult = await supadata.transcript({
-    url,
-    text: false,  // Get timestamped chunks
-    mode: 'auto', // native → AI fallback
-  });
+  const client = getClient();
 
-  // Handle async jobs (large files)
+  // Get transcript — try English first, then auto-detect
   let transcriptData;
-  if (transcriptResult && 'jobId' in transcriptResult) {
-    transcriptData = await pollForResult(transcriptResult.jobId);
-  } else {
-    transcriptData = transcriptResult;
+  try {
+    transcriptData = await client.transcript({
+      url,
+      lang: 'en',
+      text: false,
+    });
+  } catch {
+    // Fallback: no language preference
+    transcriptData = await client.transcript({
+      url,
+      text: false,
+    });
+  }
+
+  // Handle async jobs
+  if (transcriptData && 'jobId' in transcriptData) {
+    transcriptData = await pollForResult(transcriptData.jobId);
   }
 
   const content = transcriptData.content || [];
@@ -42,8 +52,7 @@ export async function transcribeVideo(url, maxSeconds = null) {
     throw new Error('No transcript available for this video');
   }
 
-  // Get title/duration from first/last segments
-  const title = transcriptData.title || 'YouTube Video';
+  // Calculate duration from last segment
   const lastSeg = content[content.length - 1];
   const duration = lastSeg ? Math.ceil((lastSeg.offset + (lastSeg.duration || 0)) / 1000) : 0;
 
@@ -64,15 +73,17 @@ export async function transcribeVideo(url, maxSeconds = null) {
   return {
     transcript,
     duration,
-    title,
+    title: `YouTube Video (${videoId})`,
     isTruncated: maxSeconds ? duration > maxSeconds : false,
     processedDuration: maxSeconds ? Math.min(duration, maxSeconds) : duration,
+    lang: transcriptData.lang || 'unknown',
   };
 }
 
 async function pollForResult(jobId, maxAttempts = 30, intervalMs = 2000) {
+  const client = getClient();
   for (let i = 0; i < maxAttempts; i++) {
-    const result = await supadata.transcript.getJobStatus(jobId);
+    const result = await client.transcript.getJobStatus(jobId);
     if (result.status === 'completed') return result;
     if (result.status === 'failed') throw new Error('Transcription job failed');
     await new Promise(resolve => setTimeout(resolve, intervalMs));
