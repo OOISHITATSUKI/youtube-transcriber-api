@@ -1,12 +1,12 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import dotenv from 'dotenv';
 import { transcribeRouter } from './routes/transcribe.js';
 import { summarizeRouter } from './routes/summarize.js';
 import { rateLimiter } from './middleware/rateLimit.js';
-
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -27,4 +27,6 @@ app.get('/health', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log(`SUPADATA_API_KEY: ${process.env.SUPADATA_API_KEY ? 'set' : 'MISSING'}`);
+  console.log(`ANTHROPIC_API_KEY: ${process.env.ANTHROPIC_API_KEY ? 'set' : 'MISSING'}`);
 });
