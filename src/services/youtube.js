@@ -35,8 +35,16 @@ export async function fetchTranscript(url) {
   const duration = parseInt(data.videoDetails?.lengthSeconds || '0');
 
   // Step 3: Find caption tracks
+  const hasCaptions = !!data.captions;
   const tracks = data.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+  console.log(`[${videoId}] hasCaptions: ${hasCaptions}, tracks: ${tracks?.length || 0}, playability: ${data.playabilityStatus?.status}`);
   if (!tracks || tracks.length === 0) {
+    // Fallback: try innertube API with WEB client
+    console.log(`[${videoId}] No tracks from page scrape, trying innertube API...`);
+    const innerResult = await tryInnertubeApi(videoId);
+    if (innerResult) {
+      return { ...innerResult, title: innerResult.title || title, duration: innerResult.duration || duration };
+    }
     return { transcript: null, title, duration };
   }
 
@@ -60,6 +68,52 @@ export async function fetchTranscript(url) {
   // Step 5: Parse
   const transcript = parseCaptionXml(xml);
   return { transcript, title, duration };
+}
+
+async function tryInnertubeApi(videoId) {
+  const clients = [
+    { name: 'WEB', version: '2.20241126', ua: USER_AGENT },
+    { name: 'MWEB', version: '2.20241126', ua: 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36' },
+    { name: 'TV_EMBEDDED', version: '2.0', ua: USER_AGENT },
+  ];
+
+  for (const client of clients) {
+    try {
+      const res = await fetch('https://www.youtube.com/youtubei/v1/player', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': client.ua,
+        },
+        body: JSON.stringify({
+          context: {
+            client: {
+              clientName: client.name,
+              clientVersion: client.version,
+            },
+          },
+          videoId,
+        }),
+      });
+
+      const data = await res.json();
+      const tracks = data.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+      console.log(`[${videoId}] innertube ${client.name}: tracks=${tracks?.length || 0}`);
+
+      if (tracks && tracks.length > 0) {
+        const preferred = tracks.find(t => t.languageCode === 'en') || tracks[0];
+        const capRes = await fetch(preferred.baseUrl, { headers: { 'User-Agent': USER_AGENT } });
+        const xml = await capRes.text();
+        const transcript = parseCaptionXml(xml);
+        const title = data.videoDetails?.title;
+        const duration = parseInt(data.videoDetails?.lengthSeconds || '0');
+        if (transcript) return { transcript, title, duration };
+      }
+    } catch (e) {
+      console.log(`[${videoId}] innertube ${client.name} failed: ${e.message}`);
+    }
+  }
+  return null;
 }
 
 function parseCaptionXml(xml) {
