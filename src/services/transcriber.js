@@ -30,21 +30,11 @@ export async function transcribeVideo(url, maxSeconds = null) {
 
   const client = getClient();
 
-  // Get transcript — try English first, then auto-detect
-  let transcriptData;
-  try {
-    transcriptData = await client.transcript({
-      url,
-      lang: 'en',
-      text: false,
-    });
-  } catch {
-    // Fallback: no language preference
-    transcriptData = await client.transcript({
-      url,
-      text: false,
-    });
-  }
+  // Get transcript in the video's original language
+  const transcriptData = await client.transcript({
+    url,
+    text: false,
+  });
 
   // Handle async jobs
   if (transcriptData && 'jobId' in transcriptData) {
