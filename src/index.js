@@ -37,15 +37,25 @@ app.get('/health', (req, res) => {
 });
 
 // Serve frontend static files
-const publicPath = path.join(__dirname, '..', 'public');
-app.use(express.static(publicPath));
+const publicPath = path.resolve(__dirname, '..', 'public');
 
-// SPA fallback — all non-API routes serve index.html
-app.get('*', (req, res) => {
-  res.sendFile(path.join(publicPath, 'index.html'));
-});
+import fs from 'fs';
+const indexExists = fs.existsSync(path.join(publicPath, 'index.html'));
+console.log(`Public path: ${publicPath}, index.html exists: ${indexExists}`);
+
+if (indexExists) {
+  app.use(express.static(publicPath));
+
+  // SPA fallback — all non-API routes serve index.html
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(publicPath, 'index.html'));
+  });
+} else {
+  app.get('/', (req, res) => {
+    res.json({ error: 'Frontend not found', publicPath, cwd: process.cwd() });
+  });
+}
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  console.log(`Serving frontend from: ${publicPath}`);
 });
