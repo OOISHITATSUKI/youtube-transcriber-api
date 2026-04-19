@@ -38,7 +38,10 @@ checkoutRouter.post('/', async (req, res) => {
 
   try {
     const token = userToken || crypto.randomUUID();
-    const frontendUrl = process.env.FRONTEND_URL || `https://${req.headers.host}`;
+    let frontendUrl = (process.env.FRONTEND_URL || '').replace(/\s+/g, '').replace(/\/$/, '');
+    if (!frontendUrl || !frontendUrl.startsWith('http')) {
+      frontendUrl = `https://${req.headers.host}`;
+    }
 
     const session = await getStripe().checkout.sessions.create({
       payment_method_types: ['card'],
