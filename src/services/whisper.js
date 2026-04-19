@@ -1,23 +1,47 @@
-import OpenAI from 'openai';
+import OpenAI, { toFile } from 'openai';
 import fs from 'fs';
+import path from 'path';
 
-let openai;
+let openaiClient = null;
+
 function getClient() {
-  if (!openai) {
+  if (!openaiClient) {
     const key = (process.env.OPENAI_API_KEY || '').replace(/\s+/g, '');
     if (!key) throw new Error('OPENAI_API_KEY is not set');
-    openai = new OpenAI({ apiKey: key });
+    openaiClient = new OpenAI({ apiKey: key });
   }
-  return openai;
+  return openaiClient;
+}
+
+function getMimeType(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  const mimeMap = {
+    '.mp3': 'audio/mpeg',
+    '.wav': 'audio/wav',
+    '.m4a': 'audio/mp4',
+    '.mp4': 'audio/mp4',
+    '.ogg': 'audio/ogg',
+    '.oga': 'audio/ogg',
+    '.flac': 'audio/flac',
+    '.webm': 'audio/webm',
+    '.mpeg': 'audio/mpeg',
+    '.mpga': 'audio/mpeg',
+    '.mov': 'audio/mp4',
+  };
+  return mimeMap[ext] || 'audio/mpeg';
 }
 
 export async function transcribeAudioFile(filePath, language = 'ja') {
-  const audioFile = fs.createReadStream(filePath);
+  const client = getClient();
 
-  const transcription = await getClient().audio.transcriptions.create({
+  const fileName = path.basename(filePath);
+  const buffer = fs.readFileSync(filePath);
+  const file = await toFile(buffer, fileName, { type: getMimeType(filePath) });
+
+  const transcription = await client.audio.transcriptions.create({
     model: 'whisper-1',
-    file: audioFile,
-    language,
+    file: file,
+    language: language,
     response_format: 'verbose_json',
     timestamp_granularities: ['segment'],
   });
