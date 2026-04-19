@@ -15,7 +15,6 @@ summarizeRouter.post('/', async (req, res) => {
     res.json({ summary });
   } catch (error) {
     console.error('Summary error:', error);
-    const cause = error.cause ? `(cause: ${error.cause.message || error.cause})` : '';
-    res.status(500).json({ error: 'Summarization failed', debug: `${error.name}: ${error.message} ${cause}`, status: error.status || null });
+    res.status(500).json({ error: 'Summarization failed' });
   }
 });

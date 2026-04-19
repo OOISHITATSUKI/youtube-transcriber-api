@@ -2,7 +2,11 @@ import Anthropic from '@anthropic-ai/sdk';
 
 let anthropic;
 function getClient() {
-  if (!anthropic) anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  if (!anthropic) {
+    const key = (process.env.ANTHROPIC_API_KEY || '').replace(/\s+/g, '');
+    if (!key) throw new Error('ANTHROPIC_API_KEY is not set');
+    anthropic = new Anthropic({ apiKey: key });
+  }
   return anthropic;
 }
 
