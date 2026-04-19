@@ -63,7 +63,7 @@ checkoutRouter.post('/', async (req, res) => {
     res.json({ url: session.url, sessionId: session.id, userToken: token });
   } catch (error) {
     console.error('Stripe checkout error:', error);
-    res.status(500).json({ error: 'Checkout creation failed' });
+    res.status(500).json({ error: 'Checkout creation failed', debug: error.message });
   }
 });
 
