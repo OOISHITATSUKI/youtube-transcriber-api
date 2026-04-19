@@ -1,11 +1,101 @@
 <!doctype html>
-<html lang="en">
+<html lang="ja">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>YouTube Transcriber AI — Instant Video to Text</title>
-    <meta name="description" content="Turn any YouTube video into text instantly. AI-powered transcription and summarization — even without subtitles." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <!-- SEO -->
+    <title>YouTube文字起こしAI｜議事録・セミナー記録を無料で一瞬テキスト化</title>
+    <meta name="description" content="YouTube動画のURLを貼るだけで、AIが自動で文字起こし。議事録・セミナー記録・インタビュー書き起こしを無料で一瞬テキスト化。長時間動画にも対応、ビジネス利用に最適なAI文字起こしツールです。" />
+    <meta name="keywords" content="YouTube,文字起こし,議事録,セミナー,インタビュー,AI,無料,テキスト化,書き起こし,自動字幕" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://youtube-transcriber-api-production-5d6e.up.railway.app/" />
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="YouTube文字起こしAI｜議事録・セミナー記録を無料でテキスト化" />
+    <meta property="og:description" content="YouTube動画のURLを貼るだけで、AIが自動で文字起こし。ビジネス利用に最適な無料AIツール。" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://youtube-transcriber-api-production-5d6e.up.railway.app/" />
+    <meta property="og:image" content="https://youtube-transcriber-api-production-5d6e.up.railway.app/ogp.png" />
+    <meta property="og:site_name" content="YouTube Transcriber AI" />
+    <meta property="og:locale" content="ja_JP" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="YouTube文字起こしAI｜無料でテキスト化" />
+    <meta name="twitter:description" content="YouTube動画のURLを貼るだけで、AIが自動で文字起こし。議事録・セミナー記録に最適。" />
+    <meta name="twitter:image" content="https://youtube-transcriber-api-production-5d6e.up.railway.app/ogp.png" />
+
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "YouTube Transcriber AI",
+      "description": "YouTube動画を無料でテキスト化するAI文字起こしツール。議事録・セミナー記録・インタビュー書き起こしに最適。",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "JPY"
+      },
+      "inLanguage": "ja"
+    }
+    </script>
+
+    <!-- FAQ Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "本当に無料ですか？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "はい、完全無料でご利用いただけます。会員登録やクレジットカード登録も不要です。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "どんな動画に対応していますか？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "YouTubeで公開されている動画であれば、基本的にすべて対応しています。日本語・英語をはじめ多言語に対応しています。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "文字起こしの精度はどのくらいですか？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "最新のAI音声認識技術を使用しており、ビジネス利用に十分な精度を実現しています。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "商用利用はできますか？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "議事録作成やコンテンツ制作など、業務でのご利用も可能です。ただし、対象動画の著作権はご自身でご確認ください。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "長時間の動画も大丈夫ですか？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "1時間を超える長尺動画にも対応しています。"
+          }
+        }
+      ]
+    }
+    </script>
+
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet" />
