@@ -17,15 +17,13 @@ export async function summarizeTranscript(transcript) {
     messages: [
       {
         role: 'user',
-        content: `Summarize the following YouTube video transcript.
+        content: `You MUST write your response in the SAME language as the transcript below. If the transcript is in Japanese, respond in Japanese. If in Spanish, respond in Spanish. Never respond in English unless the transcript is in English.
 
-Rules:
-- Write in natural, flowing prose (no bullet points)
-- Cover all major points without omitting key information
-- Keep it between 100-200 words
-- Start with "This video"
-- Simplify jargon where possible
-- Write in the same language as the transcript
+Summarize the transcript:
+- Natural flowing prose, no bullet points
+- Cover all major points
+- 100-200 words
+- Simplify jargon
 
 Transcript:
 ${transcript}`,
