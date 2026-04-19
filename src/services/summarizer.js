@@ -12,7 +12,7 @@ function getClient() {
 
 export async function summarizeTranscript(transcript) {
   const message = await getClient().messages.create({
-    model: 'claude-3-5-sonnet-20241022',
+    model: 'claude-sonnet-4-20250514',
     max_tokens: 1500,
     messages: [
       {
