@@ -71,6 +71,7 @@ export async function transcribeVideo(url, maxSeconds = null) {
     isTruncated: maxSeconds ? duration > maxSeconds : false,
     processedDuration: maxSeconds ? Math.min(duration, maxSeconds) : duration,
     lang: transcriptData.lang || 'unknown',
+    rawSegments: filteredContent,
   };
 }
 

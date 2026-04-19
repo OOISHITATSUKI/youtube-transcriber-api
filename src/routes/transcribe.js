@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { transcribeVideo } from '../services/transcriber.js';
+import { formatTranscript } from '../services/formatter.js';
+import { generateFormattedSRT } from '../services/srtGenerator.js';
 
 export const transcribeRouter = Router();
 
@@ -16,10 +18,31 @@ transcribeRouter.post('/', async (req, res) => {
   }
 
   try {
-    // Free tier: 180 seconds
     const maxSeconds = 180;
     const result = await transcribeVideo(url, maxSeconds);
-    res.json(result);
+
+    // Format transcript with speaker labels via Claude
+    let formattedTranscript = result.transcript;
+    try {
+      formattedTranscript = await formatTranscript(result.transcript);
+    } catch (formatError) {
+      console.error('Format error (using raw transcript):', formatError);
+    }
+
+    // Generate SRT from formatted transcript
+    let srt = '';
+    try {
+      srt = generateFormattedSRT(formattedTranscript);
+    } catch (srtError) {
+      console.error('SRT generation error:', srtError);
+    }
+
+    res.json({
+      ...result,
+      transcript: formattedTranscript,
+      rawTranscript: result.transcript,
+      srt,
+    });
 
   } catch (error) {
     console.error('Transcription error:', error);
