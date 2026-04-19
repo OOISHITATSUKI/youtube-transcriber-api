@@ -33,6 +33,6 @@ transcribeRouter.post('/', async (req, res) => {
       errorMessage = 'No transcript available for this video.';
     }
 
-    res.status(500).json({ error: errorMessage, debug: error.message });
+    res.status(500).json({ error: errorMessage });
   }
 });

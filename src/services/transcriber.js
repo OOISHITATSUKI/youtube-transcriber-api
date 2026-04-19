@@ -4,7 +4,6 @@ let supadata;
 function getClient() {
   if (!supadata) {
     const key = process.env.SUPADATA_API_KEY;
-    console.log(`[transcriber] Initializing Supadata client, key: ${key ? key.substring(0, 8) + '...' : 'MISSING'}`);
     if (!key) throw new Error('SUPADATA_API_KEY is not set');
     supadata = new Supadata({ apiKey: key });
   }

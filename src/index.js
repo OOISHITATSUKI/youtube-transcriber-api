@@ -24,14 +24,7 @@ app.use('/api/transcribe', transcribeRouter);
 app.use('/api/summarize', summarizeRouter);
 
 app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    env: {
-      SUPADATA_API_KEY: process.env.SUPADATA_API_KEY ? `${process.env.SUPADATA_API_KEY.substring(0, 8)}...` : 'MISSING',
-      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ? 'set' : 'MISSING',
-    },
-  });
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 app.listen(PORT, () => {
