@@ -2,11 +2,12 @@ import { Router } from 'express';
 import { transcribeVideo } from '../services/transcriber.js';
 import { formatTranscript } from '../services/formatter.js';
 import { generateFormattedSRT } from '../services/srtGenerator.js';
+import { checkCredits, consumeCredit } from '../services/credits.js';
 
 export const transcribeRouter = Router();
 
 transcribeRouter.post('/', async (req, res) => {
-  const { url } = req.body;
+  const { url, sessionId } = req.body;
 
   if (!url) {
     return res.status(400).json({ error: 'URL is required' });
@@ -18,23 +19,35 @@ transcribeRouter.post('/', async (req, res) => {
   }
 
   try {
-    const maxSeconds = 180;
+    const { isPaid } = await checkCredits(sessionId);
+    const maxSeconds = isPaid ? null : 180;
+
     const result = await transcribeVideo(url, maxSeconds);
 
-    // Format transcript with speaker labels via Claude
+    // Speaker formatting
     let formattedTranscript = result.transcript;
     try {
       formattedTranscript = await formatTranscript(result.transcript);
-    } catch (formatError) {
-      console.error('Format error (using raw transcript):', formatError);
+    } catch (e) {
+      console.error('Format error:', e);
     }
 
-    // Generate SRT from formatted transcript
+    // SRT
     let srt = '';
     try {
       srt = generateFormattedSRT(formattedTranscript);
-    } catch (srtError) {
-      console.error('SRT generation error:', srtError);
+    } catch (e) {
+      console.error('SRT error:', e);
+    }
+
+    // Consume credit for paid users
+    let creditsRemaining = 0;
+    if (isPaid && sessionId) {
+      const creditsNeeded = result.duration > 1200 ? 2 : 1;
+      const consumption = await consumeCredit(sessionId, creditsNeeded, {
+        type: 'youtube', url, duration: result.duration,
+      });
+      creditsRemaining = consumption.creditsRemaining;
     }
 
     res.json({
@@ -42,20 +55,14 @@ transcribeRouter.post('/', async (req, res) => {
       transcript: formattedTranscript,
       rawTranscript: result.transcript,
       srt,
+      creditsRemaining,
     });
 
   } catch (error) {
     console.error('Transcription error:', error);
-
     let errorMessage = 'Transcription failed';
-    if (error.message.includes('Invalid YouTube URL')) {
-      errorMessage = error.message;
-    } else if (error.message.includes('not-found') || error.message.includes('video')) {
-      errorMessage = 'Video not found. Please check the URL.';
-    } else if (error.message.includes('No transcript')) {
-      errorMessage = 'No transcript available for this video.';
-    }
-
+    if (error.message.includes('Invalid YouTube URL')) errorMessage = error.message;
+    else if (error.message.includes('No transcript')) errorMessage = 'No transcript available for this video.';
     res.status(500).json({ error: errorMessage });
   }
 });

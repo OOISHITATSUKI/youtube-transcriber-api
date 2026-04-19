@@ -6,6 +6,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import { transcribeRouter } from './routes/transcribe.js';
 import { summarizeRouter } from './routes/summarize.js';
+import { audioTranscribeRouter } from './routes/audio-transcribe.js';
 import { rateLimiter } from './middleware/rateLimit.js';
 
 const app = express();
@@ -17,11 +18,12 @@ app.use(helmet());
 app.use(cors({
   origin: process.env.FRONTEND_URL || '*',
 }));
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '10mb' }));
 app.use(rateLimiter);
 
 app.use('/api/transcribe', transcribeRouter);
 app.use('/api/summarize', summarizeRouter);
+app.use('/api/audio-transcribe', audioTranscribeRouter);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
