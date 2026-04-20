@@ -17,14 +17,14 @@ const PLANS = {
   pack5: {
     name: '5 Credit Pack',
     credits: 5,
-    amountCents: 250,
-    description: '5 transcription credits ($0.50 each)',
+    amountCents: 100,
+    description: '5 transcription credits ($0.20 each)',
   },
   pack10: {
-    name: '10 Credit Pack (20% OFF)',
+    name: '10 Credit Pack (25% OFF)',
     credits: 10,
-    amountCents: 400,
-    description: '10 transcription credits ($0.40 each)',
+    amountCents: 150,
+    description: '10 transcription credits ($0.15 each)',
   },
 };
 
