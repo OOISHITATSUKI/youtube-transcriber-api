@@ -8,7 +8,7 @@ function adminAuth(req, res, next) {
   const password = (req.headers['x-admin-password'] || req.query.password || '').trim();
   const adminPassword = (process.env.ADMIN_PASSWORD || '').trim();
   if (!adminPassword || password !== adminPassword) {
-    return res.status(401).json({ error: 'Unauthorized', hasEnv: !!adminPassword, envLen: adminPassword?.length });
+    return res.status(401).json({ error: 'Unauthorized' });
   }
   next();
 }
