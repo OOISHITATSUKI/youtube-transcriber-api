@@ -13,7 +13,7 @@ transcribeRouter.post('/', async (req, res) => {
     return res.status(400).json({ error: 'URL is required' });
   }
 
-  const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)/;
+  const youtubeRegex = /^(https?:\/\/)?(www\.|m\.)?(youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/|youtube\.com\/live\/)/;
   if (!youtubeRegex.test(url)) {
     return res.status(400).json({ error: 'Please enter a valid YouTube URL' });
   }
