@@ -61,6 +61,14 @@ app.use('/api/checkout', checkoutRouter);
 app.use('/api/verify-payment', verifyPaymentRouter);
 app.use('/api/admin', adminRouter);
 
+// Temporary debug — remove after confirming
+app.get('/debug-env', (req, res) => {
+  const envKeys = Object.keys(process.env).filter(k =>
+    ['ADMIN', 'STRIPE', 'SUPABASE', 'OPENAI', 'SUPADATA', 'ANTHROPIC', 'FRONTEND', 'NODE_ENV', 'RAILWAY'].some(prefix => k.toUpperCase().includes(prefix))
+  );
+  res.json(envKeys.map(k => ({ key: k, hasValue: !!process.env[k], len: process.env[k]?.length })));
+});
+
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
