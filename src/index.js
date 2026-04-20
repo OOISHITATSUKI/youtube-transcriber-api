@@ -16,11 +16,33 @@ import { verifyPaymentRouter } from './routes/verify-payment.js';
 import { rateLimiter } from './middleware/rateLimit.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const CANONICAL_HOST = 'yt-transcriber.com';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.set('trust proxy', 1);
+
+// 301 redirect: Railway URL → canonical domain (production only)
+app.use((req, res, next) => {
+  // Skip in dev
+  if (process.env.NODE_ENV !== 'production' && !process.env.RAILWAY_ENVIRONMENT) {
+    return next();
+  }
+  // Skip health check
+  if (req.path === '/health') return next();
+  // Skip API routes
+  if (req.path.startsWith('/api/')) return next();
+
+  const host = req.hostname;
+  if (host === CANONICAL_HOST || host === `www.${CANONICAL_HOST}` || host === 'localhost') {
+    return next();
+  }
+
+  // Redirect to canonical domain
+  const redirectUrl = `https://${CANONICAL_HOST}${req.originalUrl}`;
+  return res.redirect(301, redirectUrl);
+});
 
 // Stripe webhook needs raw body — mount before json parser
 app.use('/api/webhook', webhookRouter);
