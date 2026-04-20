@@ -13,6 +13,7 @@ import { audioTranscribeRouter } from './routes/audio-transcribe.js';
 import { checkoutRouter } from './routes/checkout.js';
 import { webhookRouter } from './routes/webhook.js';
 import { verifyPaymentRouter } from './routes/verify-payment.js';
+import { adminRouter } from './routes/admin.js';
 import { rateLimiter } from './middleware/rateLimit.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -58,6 +59,7 @@ app.use('/api/summarize', rateLimiter, summarizeRouter);
 app.use('/api/audio-transcribe', rateLimiter, audioTranscribeRouter);
 app.use('/api/checkout', checkoutRouter);
 app.use('/api/verify-payment', verifyPaymentRouter);
+app.use('/api/admin', adminRouter);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
