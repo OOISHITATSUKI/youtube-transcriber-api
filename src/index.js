@@ -78,7 +78,7 @@ app.use('/api/admin', adminRouter);
 app.use('/api/seo-advice', rateLimiter, seoAdviceRouter);
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({ status: 'ok', version: '2.1.0-innertube', timestamp: new Date().toISOString() });
 });
 
 // Serve frontend
