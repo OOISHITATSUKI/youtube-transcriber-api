@@ -50,7 +50,21 @@ app.use((req, res, next) => {
 app.use('/api/webhook', webhookRouter);
 
 app.use(helmet({ contentSecurityPolicy: false }));
-app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin) return callback(null, true);
+    // Allow Chrome extension origins
+    if (origin.startsWith('chrome-extension://')) return callback(null, true);
+    // Allow configured frontend URL or all
+    const allowed = process.env.FRONTEND_URL || '*';
+    if (allowed === '*') return callback(null, true);
+    if (origin === allowed) return callback(null, true);
+    // Allow same-domain
+    if (origin.includes('yt-transcriber.com')) return callback(null, true);
+    callback(null, true);
+  }
+}));
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
