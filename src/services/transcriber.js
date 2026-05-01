@@ -18,11 +18,11 @@ export async function transcribeVideo(url, maxSeconds = null) {
     throw new Error('Invalid YouTube URL');
   }
 
-  // Try preferred languages in order: ja, en, then any available
+  // Try fetching transcript: first with no lang (gets default/auto), then specific langs
   let segments = null;
   let lang = 'unknown';
 
-  const langAttempts = ['ja', 'en', undefined]; // undefined = default/any
+  const langAttempts = [undefined, 'ja', 'en']; // undefined = default/any first
 
   for (const tryLang of langAttempts) {
     try {
@@ -34,11 +34,12 @@ export async function transcribeVideo(url, maxSeconds = null) {
         break;
       }
     } catch (e) {
-      // If "no transcript" error, try next language
-      if (!e.message?.includes('Could not get the transcript') &&
-          !e.message?.includes('No transcript')) {
-        throw e;
+      const msg = e.message || '';
+      // If disabled or not available, try next language before giving up
+      if (msg.includes('disabled') || msg.includes('Could not get') || msg.includes('No transcript') || msg.includes('not available')) {
+        continue;
       }
+      throw e;
     }
   }
 

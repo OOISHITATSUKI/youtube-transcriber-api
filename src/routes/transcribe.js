@@ -61,9 +61,12 @@ transcribeRouter.post('/', async (req, res) => {
   } catch (error) {
     console.error('Transcription error:', error.message, error.stack);
     let errorMessage = 'Transcription failed';
-    if (error.message.includes('Invalid YouTube URL')) errorMessage = error.message;
-    else if (error.message.includes('No transcript') || error.message.includes('Could not get')) errorMessage = 'No transcript available for this video.';
-    else errorMessage = `Transcription failed: ${error.message}`;
+    const msg = error.message || '';
+    if (msg.includes('Invalid YouTube URL')) errorMessage = error.message;
+    else if (msg.includes('No transcript') || msg.includes('Could not get') || msg.includes('not available')) errorMessage = 'No transcript available for this video.';
+    else if (msg.includes('disabled')) errorMessage = 'Transcripts are disabled for this video.';
+    else if (msg.includes('Too many requests')) errorMessage = 'Too many requests. Please try again later.';
+    else errorMessage = `Transcription failed: ${msg}`;
     res.status(500).json({ error: errorMessage });
   }
 });
