@@ -1,4 +1,12 @@
-import { YoutubeTranscript } from 'youtube-transcript';
+const INNERTUBE_API_URL = 'https://www.youtube.com/youtubei/v1/player?prettyPrint=false';
+const INNERTUBE_CLIENT_VERSION = '20.10.38';
+const INNERTUBE_CONTEXT = {
+  client: {
+    clientName: 'ANDROID',
+    clientVersion: INNERTUBE_CLIENT_VERSION,
+  },
+};
+const INNERTUBE_USER_AGENT = `com.google.android.youtube/${INNERTUBE_CLIENT_VERSION} (Linux; U; Android 14)`;
 
 function extractVideoId(url) {
   const patterns = [
@@ -18,38 +26,61 @@ export async function transcribeVideo(url, maxSeconds = null) {
     throw new Error('Invalid YouTube URL');
   }
 
-  // Try fetching transcript: first with no lang (gets default/auto), then specific langs
-  let segments = null;
-  let lang = 'unknown';
+  // Get caption tracks via InnerTube API (Android client)
+  const playerRes = await fetch(INNERTUBE_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'User-Agent': INNERTUBE_USER_AGENT,
+    },
+    body: JSON.stringify({
+      context: INNERTUBE_CONTEXT,
+      videoId,
+    }),
+  });
 
-  const langAttempts = [undefined, 'ja', 'en']; // undefined = default/any first
-
-  for (const tryLang of langAttempts) {
-    try {
-      const config = tryLang ? { lang: tryLang } : {};
-      const data = await YoutubeTranscript.fetchTranscript(videoId, config);
-      if (data && data.length > 0) {
-        segments = data;
-        lang = data[0]?.lang || tryLang || 'auto';
-        break;
-      }
-    } catch (e) {
-      const msg = e.message || '';
-      // If disabled or not available, try next language before giving up
-      if (msg.includes('disabled') || msg.includes('Could not get') || msg.includes('No transcript') || msg.includes('not available')) {
-        continue;
-      }
-      throw e;
-    }
+  if (!playerRes.ok) {
+    throw new Error('Failed to get video info');
   }
 
-  if (!segments || segments.length === 0) {
+  const playerData = await playerRes.json();
+
+  if (playerData.playabilityStatus?.status === 'ERROR' ||
+      playerData.playabilityStatus?.status === 'UNPLAYABLE') {
+    throw new Error('Video is unavailable');
+  }
+
+  const captionTracks = playerData?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+  if (!captionTracks || captionTracks.length === 0) {
     throw new Error('No transcript available for this video');
   }
 
-  // Calculate duration from last segment
+  // Select best track (prefer ja > asr > en > first)
+  let selectedTrack =
+    captionTracks.find(t => t.languageCode === 'ja') ||
+    captionTracks.find(t => t.kind === 'asr') ||
+    captionTracks.find(t => t.languageCode === 'en') ||
+    captionTracks[0];
+
+  // Fetch the transcript XML
+  const transcriptRes = await fetch(selectedTrack.baseUrl);
+  const xmlText = await transcriptRes.text();
+
+  if (!xmlText || xmlText.length === 0) {
+    throw new Error('Failed to fetch transcript data');
+  }
+
+  // Parse XML
+  const segments = parseTranscriptXML(xmlText);
+
+  if (segments.length === 0) {
+    throw new Error('No transcript available for this video');
+  }
+
+  // Calculate duration
   const lastSeg = segments[segments.length - 1];
-  const duration = lastSeg ? Math.ceil((lastSeg.offset + (lastSeg.duration || 0)) / 1000) : 0;
+  const duration = parseInt(playerData?.videoDetails?.lengthSeconds || '0') ||
+    Math.ceil((lastSeg.offset + lastSeg.duration) / 1000);
 
   // Truncate for free users
   const filteredContent = maxSeconds
@@ -62,17 +93,54 @@ export async function transcribeVideo(url, maxSeconds = null) {
     const min = Math.floor(totalSec / 60);
     const sec = totalSec % 60;
     const timestamp = `[${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}]`;
-    const text = seg.text.replace(/\n/g, ' ').trim();
-    return `${timestamp} ${text}`;
+    return `${timestamp} ${seg.text}`;
   }).join('\n');
 
   return {
     transcript,
     duration,
-    title: `YouTube Video (${videoId})`,
+    title: playerData?.videoDetails?.title || `YouTube Video (${videoId})`,
     isTruncated: maxSeconds ? duration > maxSeconds : false,
     processedDuration: maxSeconds ? Math.min(duration, maxSeconds) : duration,
-    lang,
+    lang: selectedTrack.languageCode || 'auto',
     rawSegments: filteredContent,
   };
+}
+
+function parseTranscriptXML(xmlText) {
+  const segments = [];
+
+  // Format 1: <text start="..." dur="...">text</text> (classic)
+  const regex1 = /<text start="([^"]*)" dur="([^"]*)">([^<]*)<\/text>/g;
+  let match;
+  while ((match = regex1.exec(xmlText)) !== null) {
+    const start = parseFloat(match[1]) * 1000;
+    const dur = parseFloat(match[2]) * 1000;
+    const text = decodeEntities(match[3]);
+    if (text) segments.push({ offset: start, duration: dur, text });
+  }
+
+  // Format 2: <p t="..." d="..."><s>text</s></p> (timedtext format 3)
+  if (segments.length === 0) {
+    const regex2 = /<p t="(\d+)"(?: d="(\d+)")?[^>]*><s[^>]*>([^<]*)<\/s><\/p>/g;
+    while ((match = regex2.exec(xmlText)) !== null) {
+      const start = parseInt(match[1]);
+      const dur = parseInt(match[2] || '0');
+      const text = decodeEntities(match[3]);
+      if (text) segments.push({ offset: start, duration: dur, text });
+    }
+  }
+
+  return segments;
+}
+
+function decodeEntities(text) {
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/\n/g, ' ')
+    .trim();
 }
