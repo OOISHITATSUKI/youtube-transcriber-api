@@ -59,10 +59,11 @@ transcribeRouter.post('/', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Transcription error:', error);
+    console.error('Transcription error:', error.message, error.stack);
     let errorMessage = 'Transcription failed';
     if (error.message.includes('Invalid YouTube URL')) errorMessage = error.message;
-    else if (error.message.includes('No transcript')) errorMessage = 'No transcript available for this video.';
+    else if (error.message.includes('No transcript') || error.message.includes('Could not get')) errorMessage = 'No transcript available for this video.';
+    else errorMessage = `Transcription failed: ${error.message}`;
     res.status(500).json({ error: errorMessage });
   }
 });
