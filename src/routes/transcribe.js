@@ -48,15 +48,6 @@ transcribeRouter.post('/', async (req, res) => {
         type: 'youtube', url, duration: result.duration,
       });
       creditsRemaining = consumption.creditsRemaining;
-    } else if (sessionId) {
-      // Record free usage for history
-      recordUsage(sessionId, {
-        type: 'youtube_free',
-        url,
-        fileName: result.title,
-        duration: result.duration,
-        creditsUsed: 0,
-      });
     }
 
     res.json({

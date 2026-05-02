@@ -76,6 +76,23 @@ adminRouter.post('/test-credits', async (req, res) => {
   }
 });
 
+// POST /api/admin/add-credits - Add credits to a specific user
+adminRouter.post('/add-credits', async (req, res) => {
+  const { userToken, amount = 10 } = req.body;
+  if (!userToken) return res.status(400).json({ error: 'userToken is required' });
+
+  try {
+    const result = await addCredits(userToken, amount);
+    res.json({
+      userToken,
+      creditsAdded: amount,
+      creditsRemaining: result.creditsRemaining,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/admin/check/:token
 adminRouter.get('/check/:token', async (req, res) => {
   try {
