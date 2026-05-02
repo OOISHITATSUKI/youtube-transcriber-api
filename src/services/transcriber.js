@@ -40,19 +40,21 @@ export async function transcribeVideo(url, maxSeconds = null) {
   });
 
   if (!playerRes.ok) {
-    throw new Error('Failed to get video info');
+    throw new Error(`Failed to get video info (HTTP ${playerRes.status})`);
   }
 
   const playerData = await playerRes.json();
 
-  if (playerData.playabilityStatus?.status === 'ERROR' ||
-      playerData.playabilityStatus?.status === 'UNPLAYABLE') {
-    throw new Error('Video is unavailable');
+  const status = playerData.playabilityStatus?.status;
+  if (status === 'ERROR' || status === 'UNPLAYABLE') {
+    throw new Error(`Video is unavailable (${status}: ${playerData.playabilityStatus?.reason || 'unknown'})`);
   }
 
   const captionTracks = playerData?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
   if (!captionTracks || captionTracks.length === 0) {
-    throw new Error('No transcript available for this video');
+    const reason = !playerData.captions ? 'no captions object' :
+      !playerData.captions.playerCaptionsTracklistRenderer ? 'no tracklistRenderer' : 'empty captionTracks';
+    throw new Error(`No transcript available for this video (${reason}, playability: ${status})`);
   }
 
   // Select best track (prefer ja > asr > en > first)
