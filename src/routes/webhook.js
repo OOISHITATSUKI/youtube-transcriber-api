@@ -42,5 +42,24 @@ webhookRouter.post('/', async (req, res) => {
     }
   }
 
+  // Handle subscription renewal
+  if (event.type === 'invoice.payment_succeeded') {
+    const invoice = event.data.object;
+    try {
+      const subId = invoice.subscription;
+      if (subId) {
+        const sub = await getStripe().subscriptions.retrieve(subId);
+        const userToken = sub.metadata?.user_token;
+        const credits = parseInt(sub.metadata?.credits) || 9999;
+        if (userToken) {
+          await addCredits(userToken, credits);
+          console.log(`Subscription renewal: added ${credits} credits to ${userToken}`);
+        }
+      }
+    } catch (err) {
+      console.error('Subscription renewal credit failed:', err);
+    }
+  }
+
   res.json({ received: true });
 });

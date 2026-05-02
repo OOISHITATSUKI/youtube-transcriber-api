@@ -13,7 +13,8 @@ function getStripe() {
 
 export const checkoutRouter = Router();
 
-const PLANS = {
+// One-time credit packs
+const CREDIT_PLANS = {
   pack5: {
     name: '5 Credit Pack',
     credits: 5,
@@ -28,19 +29,57 @@ const PLANS = {
   },
 };
 
+// Subscription plan
+const SUB_PLAN = {
+  id: 'monthly_unlimited',
+  name: 'Unlimited Monthly',
+  amountCents: 499,
+  credits: 9999,  // effectively unlimited
+  description: 'Unlimited transcriptions per month',
+};
+
 checkoutRouter.post('/', async (req, res) => {
   const { plan, userToken } = req.body;
-
-  const selectedPlan = PLANS[plan];
-  if (!selectedPlan) {
-    return res.status(400).json({ error: 'Invalid plan', availablePlans: Object.keys(PLANS) });
-  }
 
   try {
     const token = userToken || crypto.randomUUID();
     let frontendUrl = (process.env.FRONTEND_URL || '').replace(/\s+/g, '').replace(/\/$/, '');
     if (!frontendUrl || !frontendUrl.startsWith('http')) {
       frontendUrl = `https://${req.headers.host}`;
+    }
+
+    // Subscription plan
+    if (plan === 'monthly_unlimited') {
+      // Create a Stripe Price for the subscription (or use existing)
+      const priceId = await getOrCreateSubscriptionPrice();
+
+      const session = await getStripe().checkout.sessions.create({
+        payment_method_types: ['card'],
+        mode: 'subscription',
+        line_items: [{ price: priceId, quantity: 1 }],
+        metadata: {
+          plan: 'monthly_unlimited',
+          credits: String(SUB_PLAN.credits),
+          user_token: token,
+        },
+        subscription_data: {
+          metadata: {
+            plan: 'monthly_unlimited',
+            credits: String(SUB_PLAN.credits),
+            user_token: token,
+          },
+        },
+        success_url: `${frontendUrl}?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${frontendUrl}/pricing?payment=cancelled`,
+      });
+
+      return res.json({ url: session.url, sessionId: session.id, userToken: token });
+    }
+
+    // One-time credit pack
+    const selectedPlan = CREDIT_PLANS[plan];
+    if (!selectedPlan) {
+      return res.status(400).json({ error: 'Invalid plan', availablePlans: [...Object.keys(CREDIT_PLANS), 'monthly_unlimited'] });
     }
 
     const session = await getStripe().checkout.sessions.create({
@@ -60,7 +99,7 @@ checkoutRouter.post('/', async (req, res) => {
         user_token: token,
       },
       success_url: `${frontendUrl}?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${frontendUrl}?payment=cancelled`,
+      cancel_url: `${frontendUrl}/pricing?payment=cancelled`,
     });
 
     res.json({ url: session.url, sessionId: session.id, userToken: token });
@@ -70,14 +109,59 @@ checkoutRouter.post('/', async (req, res) => {
   }
 });
 
+// Create or find the recurring price for the subscription
+let cachedPriceId = null;
+async function getOrCreateSubscriptionPrice() {
+  if (cachedPriceId) return cachedPriceId;
+
+  const s = getStripe();
+
+  // Search for existing product
+  const products = await s.products.list({ limit: 10 });
+  let product = products.data.find(p => p.name === 'YT Transcriber Unlimited Monthly');
+
+  if (!product) {
+    product = await s.products.create({
+      name: 'YT Transcriber Unlimited Monthly',
+      description: 'Unlimited YouTube transcriptions per month',
+    });
+  }
+
+  // Search for existing price
+  const prices = await s.prices.list({ product: product.id, limit: 5 });
+  let price = prices.data.find(p => p.unit_amount === SUB_PLAN.amountCents && p.recurring?.interval === 'month' && p.active);
+
+  if (!price) {
+    price = await s.prices.create({
+      product: product.id,
+      unit_amount: SUB_PLAN.amountCents,
+      currency: 'usd',
+      recurring: { interval: 'month' },
+    });
+  }
+
+  cachedPriceId = price.id;
+  return cachedPriceId;
+}
+
 checkoutRouter.get('/plans', (req, res) => {
   res.json({
-    plans: Object.entries(PLANS).map(([key, plan]) => ({
-      id: key,
-      name: plan.name,
-      credits: plan.credits,
-      price: plan.amountCents / 100,
-      pricePerCredit: (plan.amountCents / 100 / plan.credits).toFixed(2),
-    })),
+    plans: [
+      ...Object.entries(CREDIT_PLANS).map(([key, plan]) => ({
+        id: key,
+        name: plan.name,
+        credits: plan.credits,
+        price: plan.amountCents / 100,
+        pricePerCredit: (plan.amountCents / 100 / plan.credits).toFixed(2),
+        type: 'one_time',
+      })),
+      {
+        id: 'monthly_unlimited',
+        name: SUB_PLAN.name,
+        credits: SUB_PLAN.credits,
+        price: SUB_PLAN.amountCents / 100,
+        type: 'subscription',
+      },
+    ],
   });
 });
