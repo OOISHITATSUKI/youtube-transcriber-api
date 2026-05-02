@@ -18,6 +18,7 @@ import { seoAdviceRouter } from './routes/seo-advice.js';
 import { authRouter } from './routes/auth.js';
 import { formatTranscriptRouter } from './routes/format-transcript.js';
 import { recordUsageRouter } from './routes/record-usage.js';
+import { proxyInnertubeRouter } from './routes/proxy-innertube.js';
 import { rateLimiter } from './middleware/rateLimit.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -82,6 +83,7 @@ app.use('/api/audio-transcribe', rateLimiter, audioTranscribeRouter);
 app.use('/api/checkout', checkoutRouter);
 app.use('/api/verify-payment', verifyPaymentRouter);
 app.use('/api/auth', authRouter);
+app.use('/api/innertube', rateLimiter, proxyInnertubeRouter);
 app.use('/api/format-transcript', rateLimiter, formatTranscriptRouter);
 app.use('/api/record-usage', recordUsageRouter);
 app.use('/api/admin', adminRouter);
