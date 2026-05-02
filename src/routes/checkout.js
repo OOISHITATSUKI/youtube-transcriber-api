@@ -32,10 +32,10 @@ const CREDIT_PLANS = {
 // Subscription plan
 const SUB_PLAN = {
   id: 'monthly_unlimited',
-  name: 'Unlimited Monthly',
+  name: 'Monthly 300 Credits',
   amountCents: 499,
-  credits: 9999,  // effectively unlimited
-  description: 'Unlimited transcriptions per month',
+  credits: 300,
+  description: '300 transcription credits per month',
 };
 
 checkoutRouter.post('/', async (req, res) => {

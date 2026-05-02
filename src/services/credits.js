@@ -96,6 +96,41 @@ export async function recordUsage(userToken, meta = {}) {
   }
 }
 
+export async function resetCredits(userToken, amount) {
+  if (useMemoryFallback()) {
+    memoryStore.set(userToken, amount);
+    return { success: true, creditsRemaining: amount };
+  }
+
+  try {
+    const db = getDb();
+    const { data: existing } = await db
+      .from('user_credits')
+      .select('credits_total')
+      .eq('user_token', userToken)
+      .single();
+
+    if (existing) {
+      await db.from('user_credits')
+        .update({
+          credits_remaining: amount,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_token', userToken);
+    } else {
+      await db.from('user_credits').insert({
+        user_token: userToken,
+        credits_remaining: amount,
+        credits_total: amount,
+      });
+    }
+    return { success: true, creditsRemaining: amount };
+  } catch (err) {
+    console.error('Reset credits error:', err);
+    return { success: false, creditsRemaining: 0 };
+  }
+}
+
 export async function addCredits(userToken, amount) {
   if (useMemoryFallback()) {
     const current = memoryStore.get(userToken) || 0;

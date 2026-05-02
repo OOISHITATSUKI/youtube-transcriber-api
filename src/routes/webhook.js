@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import express from 'express';
 import Stripe from 'stripe';
-import { addCredits } from '../services/credits.js';
+import { addCredits, resetCredits } from '../services/credits.js';
 
 let stripe;
 function getStripe() {
@@ -42,7 +42,7 @@ webhookRouter.post('/', async (req, res) => {
     }
   }
 
-  // Handle subscription renewal
+  // Handle subscription renewal (reset + 300 credits, no carry-over)
   if (event.type === 'invoice.payment_succeeded') {
     const invoice = event.data.object;
     try {
@@ -50,10 +50,10 @@ webhookRouter.post('/', async (req, res) => {
       if (subId) {
         const sub = await getStripe().subscriptions.retrieve(subId);
         const userToken = sub.metadata?.user_token;
-        const credits = parseInt(sub.metadata?.credits) || 9999;
+        const credits = parseInt(sub.metadata?.credits) || 300;
         if (userToken) {
-          await addCredits(userToken, credits);
-          console.log(`Subscription renewal: added ${credits} credits to ${userToken}`);
+          await resetCredits(userToken, credits);
+          console.log(`Subscription renewal: reset to ${credits} credits for ${userToken}`);
         }
       }
     } catch (err) {
