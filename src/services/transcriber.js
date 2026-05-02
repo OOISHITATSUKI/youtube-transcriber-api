@@ -1,3 +1,5 @@
+import { YoutubeTranscript } from 'youtube-transcript';
+
 const INNERTUBE_API_URL = 'https://www.youtube.com/youtubei/v1/player?prettyPrint=false';
 
 // Multiple client configs to try (YouTube blocks some from certain IPs)
@@ -79,8 +81,13 @@ export async function transcribeVideo(url, maxSeconds = null) {
     }
   }
 
+  // Fallback: use youtube-transcript package
   if (!captionTracks || captionTracks.length === 0) {
-    throw new Error(`No transcript available for this video (${lastError})`);
+    try {
+      return await transcribeViaPackage(videoId, maxSeconds);
+    } catch (pkgErr) {
+      throw new Error(`No transcript available for this video (InnerTube: ${lastError}, Package: ${pkgErr.message})`);
+    }
   }
 
   // Select best track (prefer ja > asr > en > first)
@@ -159,6 +166,59 @@ function parseTranscriptXML(xmlText) {
   }
 
   return segments;
+}
+
+async function transcribeViaPackage(videoId, maxSeconds) {
+  const langAttempts = [undefined, 'ja', 'en'];
+  let segments = null;
+  let lang = 'auto';
+
+  for (const tryLang of langAttempts) {
+    try {
+      const config = tryLang ? { lang: tryLang } : {};
+      const data = await YoutubeTranscript.fetchTranscript(videoId, config);
+      if (data && data.length > 0) {
+        segments = data.map(s => ({
+          offset: s.offset,
+          duration: s.duration || 0,
+          text: s.text.replace(/\n/g, ' ').trim(),
+        }));
+        lang = data[0]?.lang || tryLang || 'auto';
+        break;
+      }
+    } catch (e) {
+      if (e.message?.includes('disabled') || e.message?.includes('not available')) continue;
+      throw e;
+    }
+  }
+
+  if (!segments || segments.length === 0) {
+    throw new Error('No transcript via package');
+  }
+
+  const lastSeg = segments[segments.length - 1];
+  const duration = Math.ceil((lastSeg.offset + lastSeg.duration) / 1000);
+
+  const filteredContent = maxSeconds
+    ? segments.filter(seg => (seg.offset / 1000) <= maxSeconds)
+    : segments;
+
+  const transcript = filteredContent.map(seg => {
+    const totalSec = Math.floor(seg.offset / 1000);
+    const min = Math.floor(totalSec / 60);
+    const sec = totalSec % 60;
+    return `[${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}] ${seg.text}`;
+  }).join('\n');
+
+  return {
+    transcript,
+    duration,
+    title: `YouTube Video (${videoId})`,
+    isTruncated: maxSeconds ? duration > maxSeconds : false,
+    processedDuration: maxSeconds ? Math.min(duration, maxSeconds) : duration,
+    lang,
+    rawSegments: filteredContent,
+  };
 }
 
 function decodeEntities(text) {
