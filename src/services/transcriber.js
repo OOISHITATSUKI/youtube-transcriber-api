@@ -154,14 +154,22 @@ function parseTranscriptXML(xmlText) {
     if (text) segments.push({ offset: start, duration: dur, text });
   }
 
-  // Format 2: <p t="..." d="..."><s>text</s></p> (timedtext format 3)
+  // Format 2: <p t="..." d="...">...<s>word</s><s>word</s>...</p> (timedtext format 3)
   if (segments.length === 0) {
-    const regex2 = /<p t="(\d+)"(?: d="(\d+)")?[^>]*><s[^>]*>([^<]*)<\/s><\/p>/g;
-    while ((match = regex2.exec(xmlText)) !== null) {
+    const pRegex = /<p t="(\d+)"(?: d="(\d+)")?[^>]*>([\s\S]*?)<\/p>/g;
+    while ((match = pRegex.exec(xmlText)) !== null) {
       const start = parseInt(match[1]);
       const dur = parseInt(match[2] || '0');
-      const text = decodeEntities(match[3]);
-      if (text) segments.push({ offset: start, duration: dur, text });
+      const inner = match[3];
+      const sMatches = inner.match(/<s[^>]*>([^<]*)<\/s>/g);
+      let text = '';
+      if (sMatches) {
+        text = sMatches.map(s => s.replace(/<[^>]+>/g, '')).join('');
+      } else {
+        text = inner.replace(/<[^>]+>/g, '').trim();
+      }
+      text = decodeEntities(text);
+      if (text && text !== '\n') segments.push({ offset: start, duration: dur, text });
     }
   }
 
