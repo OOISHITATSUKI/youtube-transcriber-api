@@ -1,12 +1,23 @@
 const INNERTUBE_API_URL = 'https://www.youtube.com/youtubei/v1/player?prettyPrint=false';
-const INNERTUBE_CLIENT_VERSION = '20.10.38';
-const INNERTUBE_CONTEXT = {
-  client: {
-    clientName: 'ANDROID',
-    clientVersion: INNERTUBE_CLIENT_VERSION,
+
+// Multiple client configs to try (YouTube blocks some from certain IPs)
+const CLIENTS = [
+  {
+    name: 'ANDROID',
+    context: { client: { clientName: 'ANDROID', clientVersion: '20.10.38' } },
+    ua: 'com.google.android.youtube/20.10.38 (Linux; U; Android 14)',
   },
-};
-const INNERTUBE_USER_AGENT = `com.google.android.youtube/${INNERTUBE_CLIENT_VERSION} (Linux; U; Android 14)`;
+  {
+    name: 'IOS',
+    context: { client: { clientName: 'IOS', clientVersion: '20.10.38' } },
+    ua: 'com.google.ios.youtube/20.10.38',
+  },
+  {
+    name: 'TVHTML5_SIMPLY_EMBEDDED',
+    context: { client: { clientName: 'TVHTML5_SIMPLY_EMBEDDED_PLAYER', clientVersion: '2.0' }, thirdParty: { embedUrl: 'https://www.google.com' } },
+    ua: 'Mozilla/5.0',
+  },
+];
 
 function extractVideoId(url) {
   const patterns = [
@@ -26,35 +37,50 @@ export async function transcribeVideo(url, maxSeconds = null) {
     throw new Error('Invalid YouTube URL');
   }
 
-  // Get caption tracks via InnerTube API (Android client)
-  const playerRes = await fetch(INNERTUBE_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'User-Agent': INNERTUBE_USER_AGENT,
-    },
-    body: JSON.stringify({
-      context: INNERTUBE_CONTEXT,
-      videoId,
-    }),
-  });
+  // Try multiple clients until one works
+  let playerData = null;
+  let captionTracks = null;
+  let lastError = '';
 
-  if (!playerRes.ok) {
-    throw new Error(`Failed to get video info (HTTP ${playerRes.status})`);
+  for (const client of CLIENTS) {
+    try {
+      const res = await fetch(INNERTUBE_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': client.ua,
+        },
+        body: JSON.stringify({
+          context: client.context,
+          videoId,
+        }),
+      });
+
+      if (!res.ok) continue;
+
+      const data = await res.json();
+      const status = data?.playabilityStatus?.status;
+
+      if (status === 'LOGIN_REQUIRED' || status === 'ERROR' || status === 'UNPLAYABLE') {
+        lastError = `${client.name}: ${status}`;
+        continue;
+      }
+
+      const tracks = data?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+      if (tracks && tracks.length > 0) {
+        playerData = data;
+        captionTracks = tracks;
+        break;
+      }
+
+      lastError = `${client.name}: no caption tracks (status: ${status})`;
+    } catch (e) {
+      lastError = `${client.name}: ${e.message}`;
+    }
   }
 
-  const playerData = await playerRes.json();
-
-  const status = playerData.playabilityStatus?.status;
-  if (status === 'ERROR' || status === 'UNPLAYABLE') {
-    throw new Error(`Video is unavailable (${status}: ${playerData.playabilityStatus?.reason || 'unknown'})`);
-  }
-
-  const captionTracks = playerData?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
   if (!captionTracks || captionTracks.length === 0) {
-    const reason = !playerData.captions ? 'no captions object' :
-      !playerData.captions.playerCaptionsTracklistRenderer ? 'no tracklistRenderer' : 'empty captionTracks';
-    throw new Error(`No transcript available for this video (${reason}, playability: ${status})`);
+    throw new Error(`No transcript available for this video (${lastError})`);
   }
 
   // Select best track (prefer ja > asr > en > first)
@@ -72,7 +98,6 @@ export async function transcribeVideo(url, maxSeconds = null) {
     throw new Error('Failed to fetch transcript data');
   }
 
-  // Parse XML
   const segments = parseTranscriptXML(xmlText);
 
   if (segments.length === 0) {
@@ -112,7 +137,7 @@ export async function transcribeVideo(url, maxSeconds = null) {
 function parseTranscriptXML(xmlText) {
   const segments = [];
 
-  // Format 1: <text start="..." dur="...">text</text> (classic)
+  // Format 1: <text start="..." dur="...">text</text>
   const regex1 = /<text start="([^"]*)" dur="([^"]*)">([^<]*)<\/text>/g;
   let match;
   while ((match = regex1.exec(xmlText)) !== null) {
