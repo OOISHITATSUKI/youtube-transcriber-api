@@ -93,6 +93,41 @@ adminRouter.post('/add-credits', async (req, res) => {
   }
 });
 
+// GET /api/admin/lookup-user?email=xxx
+adminRouter.get('/lookup-user', async (req, res) => {
+  const { email } = req.query;
+  if (!email) return res.status(400).json({ error: 'email is required' });
+
+  try {
+    const db = getDb();
+    if (!db) return res.status(500).json({ error: 'Database unavailable' });
+
+    const { data: user } = await db
+      .from('users')
+      .select('user_token, email, name')
+      .eq('email', email)
+      .single();
+
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const { data: credits } = await db
+      .from('user_credits')
+      .select('credits_remaining, credits_total')
+      .eq('user_token', user.user_token)
+      .single();
+
+    res.json({
+      userToken: user.user_token,
+      email: user.email,
+      name: user.name,
+      credits: credits?.credits_remaining || 0,
+      totalCredits: credits?.credits_total || 0,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/admin/check/:token
 adminRouter.get('/check/:token', async (req, res) => {
   try {
