@@ -80,6 +80,32 @@ authRouter.post('/google', async (req, res) => {
   }
 });
 
+// GET /api/auth/usage - Get usage history (last 7 days)
+authRouter.get('/usage', async (req, res) => {
+  const userToken = req.headers['x-user-token'] || req.query.token;
+  if (!userToken) return res.status(401).json({ error: 'Not authenticated' });
+
+  try {
+    const db = getDb();
+    if (!db) return res.json({ usage: [] });
+
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    const { data: usage } = await db
+      .from('credit_usage')
+      .select('credits_used, usage_type, video_url, file_name, duration_seconds, created_at')
+      .eq('user_token', userToken)
+      .gte('created_at', sevenDaysAgo)
+      .order('created_at', { ascending: false })
+      .limit(20);
+
+    res.json({ usage: usage || [] });
+  } catch (err) {
+    console.error('Usage history error:', err);
+    res.json({ usage: [] });
+  }
+});
+
 // GET /api/auth/me - Get current user info
 authRouter.get('/me', async (req, res) => {
   const userToken = req.headers['x-user-token'] || req.query.token;
