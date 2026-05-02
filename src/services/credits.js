@@ -80,6 +80,22 @@ export async function consumeCredit(userToken, amount = 1, meta = {}) {
   }
 }
 
+export async function recordUsage(userToken, meta = {}) {
+  if (!userToken || useMemoryFallback()) return;
+  try {
+    await getDb().from('credit_usage').insert({
+      user_token: userToken,
+      credits_used: meta.creditsUsed || 0,
+      usage_type: meta.type || 'free_transcription',
+      video_url: meta.url || null,
+      file_name: meta.fileName || null,
+      duration_seconds: meta.duration || null,
+    });
+  } catch (err) {
+    console.error('Record usage error:', err);
+  }
+}
+
 export async function addCredits(userToken, amount) {
   if (useMemoryFallback()) {
     const current = memoryStore.get(userToken) || 0;

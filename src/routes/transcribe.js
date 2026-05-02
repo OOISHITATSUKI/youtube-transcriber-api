@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { transcribeVideo } from '../services/transcriber.js';
 import { formatTranscript } from '../services/formatter.js';
 import { generateFormattedSRT } from '../services/srtGenerator.js';
-import { checkCredits, consumeCredit } from '../services/credits.js';
+import { checkCredits, consumeCredit, recordUsage } from '../services/credits.js';
 
 export const transcribeRouter = Router();
 
@@ -40,7 +40,7 @@ transcribeRouter.post('/', async (req, res) => {
       console.error('SRT error:', e);
     }
 
-    // Consume credit for paid users
+    // Consume credit for paid users, record usage for all
     let creditsRemaining = 0;
     if (isPaid && sessionId) {
       const creditsNeeded = result.duration > 1200 ? 2 : 1;
@@ -48,6 +48,15 @@ transcribeRouter.post('/', async (req, res) => {
         type: 'youtube', url, duration: result.duration,
       });
       creditsRemaining = consumption.creditsRemaining;
+    } else if (sessionId) {
+      // Record free usage for history
+      recordUsage(sessionId, {
+        type: 'youtube_free',
+        url,
+        fileName: result.title,
+        duration: result.duration,
+        creditsUsed: 0,
+      });
     }
 
     res.json({
